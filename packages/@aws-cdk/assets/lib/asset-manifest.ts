@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { schema } from './private/manifest-file-schema';
-import { DockerImageDestination, DockerImageSource, FileDestination, FileSource } from './types';
 
 /**
  * A manifest of assets
@@ -11,6 +10,16 @@ export class AssetManifest {
    * The default name of the asset manifest in a cdk.out directory
    */
   public static readonly DEFAULT_FILENAME = 'assets.json';
+
+  /**
+   * Insert this into the destination fields to be replaced with the current region
+   */
+  public static readonly CURRENT_REGION_PLACEHOLDER = '${AWS::Region}';
+
+  /**
+   * Insert this into the destination fields to be replaced with the current account
+   */
+  public static readonly CURRENT_ACCOUNT_PLACEHOLDER = '${AWS::AccountId}';
 
   /**
    * Load an asset manifest from the given file
@@ -132,26 +141,6 @@ export interface ManifestEntry {
   readonly destination: any;
 }
 
-export class ManifestDockerImageAsset extends ManifestAsset {
-  constructor(id: AssetIdentifier, source: DockerImageSource, destination: DockerImageDestination) {
-    super(id, AssetType.DOCKER_IMAGE, source, destination);
-  }
-
-  /**
-   * Source information for this file asset
-   */
-  public get dockerSource(): DockerImageSource {
-    return this.source;
-  }
-
-  /**
-   * Destination information for this file asset
-   */
-  public get dockerDestination(): DockerImageDestination {
-    return this.destination;
-  }
-}
-
 /**
  * Identify an asset in an asset manifest
  */
@@ -211,6 +200,26 @@ function filterDict<A>(xs: Record<string, A>, pred: (x: A, key: string) => boole
 }
 
 function validateManifestFile(obj: any): schema.ManifestFile {
-  // FIXME: Validate
+  if (obj.version !== schema.CURRENT_VERSION) {
+    throw new Error(`Expected schema version '${schema.CURRENT_VERSION}', got '${obj.version}'`);
+  }
+  expectKey(obj, 'assets', 'object');
+  if (typeof obj.assets !== 'object') {
+    throw new Error(`Expected 'assets' key not an object`);
+  }
+  for (const asset of Object.values(obj.assets)) {
+    expectKey(asset, 'type', 'string');
+    expectKey(asset, 'source', 'object');
+    expectKey(asset, 'destinations', 'object');
+  }
   return obj;
+}
+
+function expectKey(obj: any, key: string, type: string) {
+  if (typeof obj !== 'object' || obj === null || !(key in obj)) {
+    throw new Error(`Expected key '${key}' missing: ${JSON.stringify(obj)}`);
+  }
+  if (typeof obj[key] !== type) {
+    throw new Error(`Expected type of key '${key}' to be '${type}': got '${typeof obj[key]}'`);
+  }
 }

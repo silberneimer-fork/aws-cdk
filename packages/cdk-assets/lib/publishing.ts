@@ -1,4 +1,4 @@
-import { AssetManifest, ManifestAsset } from "@aws-cdk/assets";
+import { AssetManifest, ManifestEntry } from "@aws-cdk/assets";
 import { IAws } from "./aws-operations";
 import { makeAssetHandler } from "./handlers";
 
@@ -11,7 +11,7 @@ export interface IPublishProgressListener {
 
 export interface IPublishProgress {
   readonly message: string;
-  readonly destination?: ManifestAsset;
+  readonly currentAsset?: ManifestEntry;
   readonly percentComplete: number;
 
   /**
@@ -41,23 +41,23 @@ export interface AssetPublishingOptions {
 
 export class AssetPublishing implements IPublishProgress {
   public message: string = 'Starting';
-  public destination?: ManifestAsset;
-  public readonly failedAssets = new Array<ManifestAsset>();
-  private readonly assets: ManifestAsset[];
+  public currentAsset?: ManifestEntry;
+  public readonly failedAssets = new Array<ManifestEntry>();
+  private readonly assets: ManifestEntry[];
 
   private readonly totalOperations: number;
   private completedOperations: number = 0;
   private aborted = false;
 
   constructor(private readonly options: AssetPublishingOptions) {
-    this.assets = this.options.manifest.assets;
+    this.assets = this.options.manifest.entries;
     this.totalOperations = this.assets.length;
   }
 
   public async publish(): Promise<void> {
     for (const asset of this.assets) {
       if (this.aborted) { break; }
-      this.destination = asset;
+      this.currentAsset = asset;
 
       try {
         if (this.progress('onAssetStart', `Packaging ${asset.id}`)) { break; }

@@ -1,4 +1,4 @@
-import { ManifestDockerImageAsset } from "@aws-cdk/assets";
+import { ManifestDockerImageEntry } from "@aws-cdk/aws-ecr-assets";
 import * as path from 'path';
 import { IAws } from "../aws-operations";
 import { IAssetHandler, MessageSink } from "../private/asset-handler";
@@ -10,7 +10,7 @@ export class ContainerImageAssetHandler implements IAssetHandler {
 
   constructor(
     private readonly root: string,
-    private readonly asset: ManifestDockerImageAsset,
+    private readonly asset: ManifestDockerImageEntry,
     private readonly aws: IAws,
     private readonly message: MessageSink) {
 
@@ -18,7 +18,7 @@ export class ContainerImageAssetHandler implements IAssetHandler {
   }
 
   public async publish(): Promise<void> {
-    const destination = this.asset.dockerDestination;
+    const destination = this.asset.destination;
 
     const ecr = this.aws.ecrClient(destination);
 
@@ -42,7 +42,7 @@ export class ContainerImageAssetHandler implements IAssetHandler {
       return;
     }
 
-    const source = this.asset.dockerSource;
+    const source = this.asset.source;
 
     const fullPath = path.join(this.root, source.directory);
     this.message(`Building Docker image at ${fullPath}`);

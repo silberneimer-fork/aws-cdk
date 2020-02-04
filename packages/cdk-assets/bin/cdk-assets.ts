@@ -1,10 +1,13 @@
 import { AssetIdentifier, AssetManifest } from '@aws-cdk/assets';
-import * as AWS from 'aws-sdk';
+import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 import * as winston from 'winston';
 import * as yargs from 'yargs';
 import { AssetPublishing, IPublishProgress, IPublishProgressListener } from '../lib';
 import { ClientOptions, IAws } from '../lib/aws-operations';
+
+const VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), { encoding: 'utf-8' })).version;
 
 const logger = winston.createLogger({
   level: 'info',
@@ -31,6 +34,7 @@ async function main() {
     console.log(manifest.list().join('\n'));
   }))
   .command('publish PATH [ASSET..]', 'Publish assets in the given manifest', command => command
+    .option('profile', { type: 'string', describe: 'Profile to use from AWS Credentials file' })
     .positional('PATH', { type: 'string', describe: 'Manifest file or cdk.out directory' })
     .require('PATH')
     .positional('ASSET', { type: 'string', array: true, describe: 'Assets to publish (format: "ASSET[:DEST]"), default all' })
@@ -41,7 +45,7 @@ async function main() {
 
     const pub = new AssetPublishing({
       manifest: manifest.select(selection),
-      aws: new DefaultAwsClient(),
+      aws: new DefaultAwsClient(args.profile),
       progressListener: new ConsoleProgress()
     });
 
@@ -54,8 +58,7 @@ async function main() {
   .demandCommand()
   .help()
   .strict()  // Error on wrong command
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  .version(require('../package.json').version)
+  .version(VERSION)
   .showHelpOnFail(false)
   .argv;
 
@@ -96,19 +99,45 @@ class ConsoleProgress implements IPublishProgressListener {
  * AWS client using the AWS SDK for JS with no special configuration
  */
 class DefaultAwsClient implements IAws {
+  private readonly AWS: typeof import('aws-sdk');
+
+  constructor(profile?: string) {
+    // Force AWS SDK to look in ~/.aws/credentials and potentially use the configured profile.
+    process.env.AWS_SDK_LOAD_CONFIG = "1";
+    if (profile) {
+      process.env.AWS_PROFILE = profile;
+    }
+
+    // We need to set the environment before we load this library for the first time.
+    this.AWS = require('aws-sdk');
+  }
+
   public s3Client(options: ClientOptions) {
-    return new AWS.S3(this.awsOptions(options));
+    return new this.AWS.S3(this.awsOptions(options));
   }
 
   public ecrClient(options: ClientOptions) {
-    return new AWS.ECR(this.awsOptions(options));
+    return new this.AWS.ECR(this.awsOptions(options));
+  }
+
+  public async defaultRegion(): Promise<string> {
+    return this.AWS.config.region || 'us-east-1';
+  }
+
+  public async currentAccount(): Promise<string> {
+    const sts = new this.AWS.STS();
+    const response = await sts.getCallerIdentity().promise();
+    if (!response.Account) {
+      logger.error(`Unrecognized reponse from STS: '${JSON.stringify(response)}'`);
+    }
+    return response.Account || '????????';
   }
 
   private awsOptions(options: ClientOptions) {
     let credentials;
 
     if (options.assumeRoleArn) {
-      credentials = new AWS.TemporaryCredentials({
+      credentials = new this.AWS.TemporaryCredentials({
         RoleArn: options.assumeRoleArn,
         ExternalId: options.assumeRoleExternalId,
         RoleSessionName: `Assets-${os.userInfo().username}`,
@@ -123,7 +152,7 @@ class DefaultAwsClient implements IAws {
 
     return {
       region: options.region,
-      customUserAgent: 'cdk-assets',
+      customUserAgent: `cdk-assets/${VERSION}`,
       credentials,
     };
   }

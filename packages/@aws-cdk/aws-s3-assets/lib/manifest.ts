@@ -1,4 +1,4 @@
-import { AssetIdentifier, AwsDestination, ManifestEntry } from "@aws-cdk/assets";
+import { AssetIdentifier, ManifestEntry } from "@aws-cdk/assets";
 
 const FILE_ASSET_TYPE = 'file';
 
@@ -46,9 +46,23 @@ export interface ManifestFileEntry {
  * Static class so that this is accessible via JSII
  */
 export class Manifest {
+  /**
+   * Return whether the given manifest entry is for a file asset
+   *
+   * Will throw if the manifest entry is for a file asset but malformed.
+   */
   public static isFileEntry(entry: ManifestEntry): entry is ManifestFileEntry {
-    // FIXME: Validate
-    return entry.type === FILE_ASSET_TYPE;
+    if (entry.type !== FILE_ASSET_TYPE) { return false; }
+
+    expectKey(entry.source, 'path', 'string');
+    expectKey(entry.source, 'packaging', 'string', true);
+    expectKey(entry.destination, 'region', 'string');
+    expectKey(entry.destination, 'assumeRoleArn', 'string', true);
+    expectKey(entry.destination, 'assumeRoleExternalId', 'string', true);
+    expectKey(entry.destination, 'bucketName', 'string');
+    expectKey(entry.destination, 'objectKey', 'string');
+
+    return true;
   }
 }
 
@@ -72,7 +86,26 @@ export interface FileSource {
 /**
  * Where in S3 a file asset needs to be published
  */
-export interface FileDestination extends AwsDestination {
+export interface FileDestination {
+  /**
+   * The region where this asset will need to be published
+   */
+  readonly region: string;
+
+  /**
+   * The role that needs to be assumed while publishing this asset
+   *
+   * @default - No role will be assumed
+   */
+  readonly assumeRoleArn?: string;
+
+  /**
+   * The ExternalId that needs to be supplied while assuming this role
+   *
+   * @default - No ExternalId will be supplied
+   */
+  readonly assumeRoleExternalId?: string;
+
   /**
    * The name of the bucket
    */
@@ -82,4 +115,13 @@ export interface FileDestination extends AwsDestination {
    * The destination object key
    */
   readonly objectKey: string;
+}
+
+function expectKey(obj: any, key: string, type: string, optional?: boolean) {
+  if (typeof obj !== 'object' || obj === null || (!(key in obj) && !optional)) {
+    throw new Error(`Expected key '${key}' missing: ${JSON.stringify(obj)}`);
+  }
+  if (key in obj && typeof obj[key] !== type) {
+    throw new Error(`Expected type of key '${key}' to be '${type}': got '${typeof obj[key]}'`);
+  }
 }
