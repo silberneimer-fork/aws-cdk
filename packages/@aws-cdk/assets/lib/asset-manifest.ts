@@ -86,7 +86,14 @@ export class AssetManifest {
    * Describe the asset manifest as a list of strings
    */
   public list() {
-    return Object.entries(this._assets).map(([key, asset]) => `${key} ${asset.type}`);
+    const ret = new Array<string>();
+    for (const [assetId, asset] of Object.entries(this._assets)) {
+      ret.push(`${assetId} ${asset.type} ${JSON.stringify(asset.source)}`);
+
+      const destStrings = Object.entries(asset.destinations).map(([destId, dest]) => ` ${assetId}:${destId} ${JSON.stringify(dest)}`);
+      ret.push(...prefixTreeChars(destStrings, '  '));
+    }
+    return ret;
   }
 
   /**
@@ -222,4 +229,17 @@ function expectKey(obj: any, key: string, type: string) {
   if (typeof obj[key] !== type) {
     throw new Error(`Expected type of key '${key}' to be '${type}': got '${typeof obj[key]}'`);
   }
+}
+
+/**
+ * Prefix box-drawing characters to make lines look like a hanging tree
+ */
+function prefixTreeChars(xs: string[], prefix = '') {
+  const ret = new Array<string>();
+  for (let i = 0; i < xs.length; i++) {
+    const isLast = i === xs.length - 1;
+    const boxChar = isLast ? '└' : '├';
+    ret.push(`${prefix}${boxChar}${xs[i]}`);
+  }
+  return ret;
 }
