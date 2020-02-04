@@ -37,6 +37,13 @@ export interface AssetPublishingOptions {
    * @default No listener
    */
   readonly progressListener?: IPublishProgressListener;
+
+  /**
+   * Whether to throw at the end if there were errors
+   *
+   * @default true
+   */
+  readonly throwOnError?: boolean;
 }
 
 export class AssetPublishing implements IPublishProgress {
@@ -44,6 +51,7 @@ export class AssetPublishing implements IPublishProgress {
   public currentAsset?: ManifestEntry;
   public readonly failedAssets = new Array<ManifestEntry>();
   private readonly assets: ManifestEntry[];
+  private readonly errors = new Array<Error>();
 
   private readonly totalOperations: number;
   private completedOperations: number = 0;
@@ -68,10 +76,15 @@ export class AssetPublishing implements IPublishProgress {
         this.completedOperations++;
         if (this.progress('onAssetEnd', `Published ${asset.id}`)) { break; }
       } catch (e) {
+        this.errors.push(e);
         this.failedAssets.push(asset);
         this.completedOperations++;
         if (this.progress('onError', e.message)) { break; }
       }
+    }
+
+    if ((this.options.throwOnError ?? true) && this.errors.length > 0) {
+      throw new Error(`Error publishing: ${this.errors}`);
     }
   }
 

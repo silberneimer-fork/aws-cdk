@@ -46,7 +46,8 @@ async function main() {
     const pub = new AssetPublishing({
       manifest: manifest.select(selection),
       aws: new DefaultAwsClient(args.profile),
-      progressListener: new ConsoleProgress()
+      progressListener: new ConsoleProgress(),
+      throwOnError: false,
     });
 
     await pub.publish();
